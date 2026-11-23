@@ -99,7 +99,7 @@ object FileHelper {
         val cleanBase = baseName.substringBeforeLast('.')
             .replace(Regex("[^A-Za-z0-9._-]"), "_")
             .trim('_')
-            .ifBlank { "convert_flow" }
+            .ifBlank { "konvertibles" }
         val dir = convertedDir(context)
         var candidate = File(dir, "$cleanBase.$ext")
         var counter = 2

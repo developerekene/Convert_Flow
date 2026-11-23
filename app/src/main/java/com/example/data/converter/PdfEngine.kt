@@ -271,7 +271,7 @@ object PdfEngine {
                 cs.setFont(fontRegular, 8.5f)
                 cs.setNonStrokingColor(122f / 255f, 129f / 255f, 142f / 255f)
                 cs.newLineAtOffset(margin, 24f)
-                cs.showText("Convert Flow • Page $pageNum")
+                cs.showText("Konvertibles • Page $pageNum")
                 cs.endText()
             }
 
@@ -317,7 +317,7 @@ object PdfEngine {
                             2 -> 14f
                             else -> 12f
                         }
-                        val (r, g, b) = if (block.level == 2) Triple(36, 87, 245) else Triple(20, 22, 25)
+                        val (r, g, b) = if (block.level == 2) Triple(220, 38, 38) else Triple(20, 21, 24)
                         drawWrappedLines(block.text, fontBold, size, size * 1.35f, margin, contentWidth, r, g, b)
                         y -= 6f
                     }
@@ -403,7 +403,7 @@ object PdfEngine {
                 cs.setFont(fontRegular, 8.5f)
                 cs.setNonStrokingColor(122f / 255f, 129f / 255f, 142f / 255f)
                 cs.newLineAtOffset(margin, 20f)
-                cs.showText("Convert Flow • Page $pageNum")
+                cs.showText("Konvertibles • Page $pageNum")
                 cs.endText()
             }
 
@@ -470,7 +470,7 @@ object PdfEngine {
             val cs = getCs()
             val rowBottom = y - rowHeight
             if (rIdx == 0) {
-                cs.setNonStrokingColor(36f / 255f, 87f / 255f, 245f / 255f)
+                cs.setNonStrokingColor(220f / 255f, 38f / 255f, 38f / 255f)
                 cs.addRect(margin, rowBottom, contentWidth, rowHeight)
                 cs.fill()
             } else if (rIdx % 2 == 0) {

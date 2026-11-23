@@ -14,6 +14,7 @@ import com.example.data.converter.SampleFileGenerator
 import com.example.data.converter.SheetData
 import com.example.data.converter.SpreadsheetData
 import com.example.data.converter.ZipEngine
+import com.example.domain.model.ConversionCatalog
 import com.example.domain.model.ConversionOptions
 import com.example.domain.model.FileFormat
 import com.example.domain.model.PdfPageSize
@@ -32,15 +33,25 @@ import java.io.FileOutputStream
 class ConversionEngineTest {
 
     @Test
+    fun `catalog exposes at least 30 distinct conversions with strict source filters`() {
+        val pipelines = ConversionCatalog.allPipelines
+        assertTrue("Expected at least 30 conversions, got ${pipelines.size}", pipelines.size >= 30)
+        pipelines.forEach { pipeline ->
+            assertTrue(pipeline.sourceFormats.isNotEmpty())
+            assertTrue(FileFormat.mimeFilterFor(pipeline.sourceFormats).isNotEmpty())
+        }
+    }
+
+    @Test
     fun `docx write and read preserves headings bullets and tables`() {
         val tempFile = File.createTempFile("test_doc", ".docx")
         try {
             val doc = DocxDocument(
                 title = "Brief",
                 blocks = listOf(
-                    DocBlock.Heading(1, "Convert Flow Report"),
-                    DocBlock.Paragraph("Local conversion summary."),
-                    DocBlock.BulletItem("Fast offline processing"),
+                    DocBlock.Heading(1, "Konvertibles Report"),
+                    DocBlock.Paragraph("On-device conversion summary."),
+                    DocBlock.BulletItem("Fast pocket-ready processing"),
                     DocBlock.Table(listOf(listOf("Format", "Support"), listOf("PDF", "Full")))
                 )
             )
@@ -50,7 +61,7 @@ class ConversionEngineTest {
             val parsed = OoxmlWordHandler.readDocx(tempFile, "Brief")
             assertEquals(4, parsed.blocks.size)
             assertTrue(parsed.blocks[0] is DocBlock.Heading)
-            assertEquals("Convert Flow Report", (parsed.blocks[0] as DocBlock.Heading).text)
+            assertEquals("Konvertibles Report", (parsed.blocks[0] as DocBlock.Heading).text)
             assertTrue(parsed.blocks[3] is DocBlock.Table)
         } finally {
             tempFile.delete()
@@ -58,7 +69,7 @@ class ConversionEngineTest {
     }
 
     @Test
-    fun `xlsx csv json round trip preserves cells`() {
+    fun `xlsx csv json xml round trip preserves cells`() {
         val xlsxFile = File.createTempFile("sheet", ".xlsx")
         try {
             val data = SpreadsheetData(
@@ -83,6 +94,11 @@ class ConversionEngineTest {
             val fromJson = OoxmlSpreadsheetHandler.readJsonTable(json, "JSON")
             assertEquals(3, fromJson.sheets.first().rows.size)
             assertEquals("Gadget", fromJson.sheets.first().rows[2][0])
+
+            val xml = OoxmlSpreadsheetHandler.toXml(readBack)
+            val fromXml = OoxmlSpreadsheetHandler.readXmlTable(xml, "XML")
+            assertEquals(3, fromXml.sheets.first().rows.size)
+            assertEquals("Widget", fromXml.sheets.first().rows[1][0])
         } finally {
             xlsxFile.delete()
         }
@@ -126,20 +142,26 @@ class ConversionEngineTest {
     }
 
     @Test
-    fun `zip pack and inspect entries`() {
+    fun `zip pack inspect and extract entries`() {
         val f1 = File.createTempFile("aaa_", ".txt").apply { writeText("hello") }
         val f2 = File.createTempFile("bbb_", ".txt").apply { writeText("world!") }
         val zip = File.createTempFile("bundle", ".zip")
+        val extractDir = File(zip.parentFile, "extract_test_${System.nanoTime()}")
         try {
             val count = ZipEngine.packFiles(listOf("first.txt" to f1, "second.txt" to f2), zip)
             assertEquals(2, count)
             val entries = ZipEngine.inspectZip(zip)
             assertEquals(2, entries.size)
             assertEquals("first.txt", entries[0].name)
+
+            val extracted = ZipEngine.extractZip(zip, extractDir)
+            assertEquals(2, extracted.size)
+            assertEquals("hello", extracted.first { it.name == "first.txt" }.readText())
         } finally {
             f1.delete()
             f2.delete()
             zip.delete()
+            extractDir.deleteRecursively()
         }
     }
 
@@ -149,11 +171,14 @@ class ConversionEngineTest {
         val uri = SampleFileGenerator.generateSample(context, SampleFileGenerator.SamplePreset.SALES_XLSX)
         assertTrue(uri.toString().contains("Sales_Data_Q4.xlsx"))
 
+        val xmlUri = SampleFileGenerator.generateSampleForFormat(context, FileFormat.XML)
+        assertTrue(xmlUri.toString().contains(".xml"))
+
         val pdfFile = File.createTempFile("doc_test", ".pdf")
         val docxFile = File.createTempFile("doc_out", ".docx")
         try {
             val pages = PdfEngine.renderDocumentToPdf(
-                DocxDocument("T", listOf(DocBlock.Heading(1, "Quarterly Summary"), DocBlock.Paragraph("Body text content for local PDF extraction."))),
+                DocxDocument("T", listOf(DocBlock.Heading(1, "Quarterly Summary"), DocBlock.Paragraph("Body text content for PDF extraction."))),
                 pdfFile,
                 PdfPageSize.A4
             )

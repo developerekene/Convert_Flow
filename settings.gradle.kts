@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "Convert Flow"
+rootProject.name = "Konvertibles"
 
 include(":app")

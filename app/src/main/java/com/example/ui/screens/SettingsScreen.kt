@@ -49,7 +49,6 @@ import com.example.BuildConfig
 import com.example.data.converter.FileHelper
 import com.example.domain.model.PdfDpiPreset
 import com.example.domain.model.PdfPageSize
-import com.example.domain.model.ThemePreference
 import com.example.ui.components.StudioPillChoice
 import com.example.ui.theme.EmeraldSuccess
 import com.example.ui.viewmodel.ConvertFlowViewModel
@@ -82,48 +81,10 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Bold)
                     )
                     Text(
-                        text = "Studio defaults, appearance, and private storage",
+                        text = "Conversion defaults and device storage",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                }
-            }
-
-            // Appearance Section
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "APPEARANCE",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 4.dp)
-                    )
-                    Surface(
-                        color = MaterialTheme.colorScheme.surface,
-                        shape = RoundedCornerShape(22.dp),
-                        tonalElevation = 1.dp,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Text("Studio Theme", style = MaterialTheme.typography.titleSmall)
-                            Row(
-                                modifier = Modifier.horizontalScroll(rememberScrollState()),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                ThemePreference.entries.forEach { mode ->
-                                    StudioPillChoice(
-                                        label = mode.label,
-                                        selected = prefs.theme == mode,
-                                        onClick = { viewModel.setTheme(mode) },
-                                        modifier = Modifier.testTag("theme_${mode.name.lowercase()}")
-                                    )
-                                }
-                            }
-                        }
-                    }
                 }
             }
 
@@ -131,7 +92,7 @@ fun SettingsScreen(
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "ENGINE DEFAULTS",
+                        text = "CONVERSION DEFAULTS",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 4.dp)
@@ -263,7 +224,7 @@ fun SettingsScreen(
                                 }
                                 Spacer(Modifier.width(12.dp))
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text("Local Output Cache", style = MaterialTheme.typography.titleSmall)
+                                    Text("Output Cache", style = MaterialTheme.typography.titleSmall)
                                     Text(
                                         text = "${FileHelper.formatSize(storageBytes)} stored privately on device",
                                         style = MaterialTheme.typography.bodySmall,
@@ -310,14 +271,14 @@ fun SettingsScreen(
                             ) {
                                 Icon(
                                     Icons.Default.Security,
-                                    contentDescription = "Local privacy",
+                                    contentDescription = "On-device privacy",
                                     tint = EmeraldSuccess,
                                     modifier = Modifier.size(20.dp)
                                 )
                                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                    Text("100% On-Device Engine", style = MaterialTheme.typography.titleSmall)
+                                    Text("Private On-Device Processing", style = MaterialTheme.typography.titleSmall)
                                     Text(
-                                        text = "All PDF, Word, Spreadsheet, Image, and ZIP tasks execute locally without uploading your files.",
+                                        text = "All PDF, Word, Spreadsheet, Image, and ZIP tasks run directly on your device without uploading your files.",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -337,11 +298,11 @@ fun SettingsScreen(
                                     modifier = Modifier.size(20.dp)
                                 )
                                 Column {
-                                    Text("Convert Flow v${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.titleSmall)
+                                    Text("Konvertibles v${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.titleSmall)
                                     Text(
-                                        text = BuildConfig.APPLICATION_ID,
+                                        text = "Pocket ready to go",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = MaterialTheme.colorScheme.primary
                                     )
                                 }
                             }
@@ -357,8 +318,8 @@ fun SettingsScreen(
     if (showClearDialog) {
         AlertDialog(
             onDismissRequest = { showClearDialog = false },
-            title = { Text("Clear Local Library?") },
-            text = { Text("This permanently deletes all converted files stored inside Convert Flow's private library and resets your history list.") },
+            title = { Text("Clear Library?") },
+            text = { Text("This permanently deletes all converted files stored inside Konvertibles and resets your history list.") },
             confirmButton = {
                 TextButton(onClick = {
                     showClearDialog = false

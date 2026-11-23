@@ -30,75 +30,80 @@ enum class ImageResizePreset(val label: String, val maxDim: Int) {
     THUMB_480("Thumb 480px", 480)
 }
 
-enum class ThemePreference(val label: String) {
-    SYSTEM("System"),
-    LIGHT("Light Studio"),
-    DARK("Dark Obsidian")
-}
-
 enum class StudioTool(
+    val pipelineId: String,
     val title: String,
     val subtitle: String,
     val badge: String,
     val category: FormatCategory
 ) {
     COMPRESS_IMAGE(
+        "compress_image",
         "Compress Image",
         "Shrink JPG, PNG & WEBP with quality or target KB limit",
         "COMP",
         FormatCategory.IMAGE
     ),
     RESIZE_IMAGE(
+        "resize_image",
         "Resize Image",
         "Scale by %, exact dimensions, or HD/Square presets",
         "RESZ",
         FormatCategory.IMAGE
     ),
     IMAGES_TO_PDF(
+        "images_to_pdf",
         "Photos to PDF",
-        "Combine one or many images into a clean A4/Letter PDF",
+        "Combine one or many images into an A4/Letter PDF",
         "PDF+",
         FormatCategory.IMAGE
     ),
     PDF_TO_IMAGES(
+        "pdf_to_png",
         "PDF to Images",
         "Export every PDF page as crisp PNG, JPG, or WEBP",
         "IMG",
         FormatCategory.DOCUMENT
     ),
     COMPRESS_PDF(
+        "compress_pdf",
         "Compress PDF",
         "Reduce PDF size using 72/150/300 DPI re-encoding",
         "COMP",
         FormatCategory.DOCUMENT
     ),
     RESIZE_PDF(
+        "resize_pdf",
         "Resize PDF Pages",
         "Normalize pages to A4, US Letter, or Legal format",
         "PAGE",
         FormatCategory.DOCUMENT
     ),
     MERGE_PDF(
+        "merge_pdf",
         "Merge PDFs",
         "Combine two or more PDF files into one document",
         "MRG",
         FormatCategory.DOCUMENT
     ),
     SPLIT_PDF(
+        "split_pdf",
         "Extract PDF Pages",
         "Save specific page ranges (e.g. 1-3, 5) to a new PDF",
         "SPLT",
         FormatCategory.DOCUMENT
     ),
     SPREADSHEET_STUDIO(
+        "xlsx_to_csv",
         "Spreadsheet Lab",
-        "Convert CSV, XLSX, TSV, JSON & PDF data tables",
+        "Convert XLSX, CSV, TSV, JSON, XML & PDF data tables",
         "DATA",
         FormatCategory.SPREADSHEET
     ),
     ZIP_ARCHIVE(
+        "pack_zip",
         "ZIP Pack & Unpack",
-        "Bundle multiple files into .zip or inspect archives",
+        "Bundle files into .zip or extract existing archives",
         "ZIP",
         FormatCategory.ARCHIVE
     )

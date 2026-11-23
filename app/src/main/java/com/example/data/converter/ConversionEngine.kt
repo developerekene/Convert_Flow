@@ -8,6 +8,7 @@ import com.example.domain.model.ConversionOutput
 import com.example.domain.model.ConversionProgress
 import com.example.domain.model.FileFormat
 import com.example.domain.model.FormatCategory
+import com.example.domain.model.PdfPageSize
 import com.example.domain.model.PickedFile
 import com.example.domain.model.ResizeMode
 import kotlinx.coroutines.Dispatchers
@@ -23,6 +24,7 @@ class ConversionEngine(
         targetFormat: FileFormat,
         options: ConversionOptions,
         operationLabel: String? = null,
+        extractArchive: Boolean = false,
         onProgress: (ConversionProgress) -> Unit = {}
     ): ConversionOutput = withContext(Dispatchers.IO) {
         require(pickedFiles.isNotEmpty()) { "Select at least one file to convert." }
@@ -30,7 +32,7 @@ class ConversionEngine(
         val tempInputs = mutableListOf<Pair<PickedFile, File>>()
 
         try {
-            onProgress(ConversionProgress("Preparing local workspace...", 0.12f))
+            onProgress(ConversionProgress("Preparing workspace...", 0.12f))
             pickedFiles.forEachIndexed { idx, pf ->
                 val temp = FileHelper.copyUriToTemp(context, pf.uri, "in_${idx}_${pf.displayName}")
                 tempInputs.add(pf to temp)
@@ -39,11 +41,11 @@ class ConversionEngine(
             val primary = pickedFiles.first()
             val totalInputBytes = tempInputs.sumOf { it.second.length() }
             val desiredBase = options.customOutputName.trim().ifBlank {
-                if (pickedFiles.size > 1) "${primary.displayName.substringBeforeLast('.')}_flow"
+                if (pickedFiles.size > 1) "${primary.displayName.substringBeforeLast('.')}_bundle"
                 else primary.displayName.substringBeforeLast('.')
             }
 
-            onProgress(ConversionProgress("Processing ${primary.format.displayName} -> ${targetFormat.displayName}...", 0.45f))
+            onProgress(ConversionProgress("Converting ${primary.format.displayName} → ${targetFormat.displayName}...", 0.45f))
 
             var finalOutputFile: File
             var finalOutputFormat = targetFormat
@@ -103,6 +105,56 @@ class ConversionEngine(
                 val srcFormat = primary.format
 
                 when {
+                    srcFormat == FileFormat.ZIP && (extractArchive || targetFormat == FileFormat.ZIP) -> {
+                        val tempExtractDir = File(context.cacheDir, "zip_extract_${System.nanoTime()}").apply { mkdirs() }
+                        try {
+                            val extracted = ZipEngine.extractZip(inputFile, tempExtractDir)
+                            if (extracted.isEmpty()) {
+                                finalOutputFile = FileHelper.createUniqueOutputFile(context, "${desiredBase}_manifest", "txt")
+                                finalOutputFormat = FileFormat.TXT
+                                finalOutputFile.writeText("The selected ZIP archive is empty.", Charsets.UTF_8)
+                                summary = "ZIP archive contained 0 files."
+                            } else if (extracted.size == 1) {
+                                val single = extracted.first()
+                                val detected = FileFormat.fromExtension(single.extension) ?: FileFormat.TXT
+                                finalOutputFormat = detected
+                                finalOutputFile = FileHelper.createUniqueOutputFile(
+                                    context,
+                                    single.nameWithoutExtension.ifBlank { desiredBase },
+                                    single.extension.ifBlank { "txt" }
+                                )
+                                single.copyTo(finalOutputFile, overwrite = true)
+                                summary = "Extracted ${single.name} (${FileHelper.formatSize(finalOutputFile.length())})."
+                            } else {
+                                val savedFiles = extracted.map { entryFile ->
+                                    val dest = FileHelper.createUniqueOutputFile(
+                                        context,
+                                        entryFile.nameWithoutExtension.ifBlank { "entry" },
+                                        entryFile.extension.ifBlank { "bin" }
+                                    )
+                                    entryFile.copyTo(dest, overwrite = true)
+                                    dest
+                                }
+                                finalOutputFormat = FileFormat.TXT
+                                finalOutputFile = FileHelper.createUniqueOutputFile(context, "${desiredBase}_extracted", "txt")
+                                val manifest = buildString {
+                                    appendLine("Konvertibles Archive Extraction Report")
+                                    appendLine("Source: ${primary.displayName}")
+                                    appendLine("Extracted ${savedFiles.size} file(s):")
+                                    appendLine()
+                                    savedFiles.forEachIndexed { i, f ->
+                                        appendLine("${i + 1}. ${f.name} (${FileHelper.formatSize(f.length())})")
+                                    }
+                                }
+                                finalOutputFile.writeText(manifest, Charsets.UTF_8)
+                                extraFiles = savedFiles
+                                summary = "Extracted ${savedFiles.size} files from ${primary.displayName}."
+                            }
+                        } finally {
+                            tempExtractDir.deleteRecursively()
+                        }
+                    }
+
                     targetFormat == FileFormat.ZIP -> {
                         finalOutputFile = FileHelper.createUniqueOutputFile(context, desiredBase, "zip")
                         ZipEngine.packFiles(listOf(primary.displayName to inputFile), finalOutputFile)
@@ -146,7 +198,6 @@ class ConversionEngine(
                                 rendered.first().copyTo(finalOutputFile, overwrite = true)
                                 summary = "Rendered 1 PDF page at ${options.pdfDpi.label} to ${targetFormat.displayName}."
                             } else {
-                                // Save individual pages to converted/ AND create a ZIP as primary output
                                 val savedPages = rendered.mapIndexed { idx, file ->
                                     val dest = FileHelper.createUniqueOutputFile(context, "${desiredBase}_p${idx + 1}", targetFormat.ext)
                                     file.copyTo(dest, overwrite = true)
@@ -169,7 +220,7 @@ class ConversionEngine(
                         val suffix = if (hasRange) "_extracted" else "_optimized"
                         finalOutputFile = FileHelper.createUniqueOutputFile(context, "$desiredBase$suffix", "pdf")
                         val totalPages = PdfEngine.getPageCount(inputFile)
-                        val written = if (hasRange && options.pdfPageSize == com.example.domain.model.PdfPageSize.ORIGINAL && options.quality >= 90) {
+                        val written = if (hasRange && options.pdfPageSize == PdfPageSize.ORIGINAL && options.quality >= 90) {
                             PdfEngine.splitPdf(inputFile, finalOutputFile, options.pageRange)
                         } else {
                             PdfEngine.compressAndResizePdf(
@@ -210,7 +261,7 @@ class ConversionEngine(
                         }
                     }
 
-                    // SPREADSHEET <-> SPREADSHEET / PDF
+                    // SPREADSHEET <-> SPREADSHEET / PDF / HTML / XML
                     srcFormat.category == FormatCategory.SPREADSHEET &&
                         (targetFormat.category == FormatCategory.SPREADSHEET || targetFormat in setOf(FileFormat.HTML, FileFormat.PDF, FileFormat.TXT)) -> {
                         val sheetData = readSpreadsheet(inputFile, srcFormat, desiredBase)
@@ -220,6 +271,7 @@ class ConversionEngine(
                             FileFormat.CSV -> finalOutputFile.writeText(OoxmlSpreadsheetHandler.toDelimited(sheetData, ','), Charsets.UTF_8)
                             FileFormat.TSV, FileFormat.TXT -> finalOutputFile.writeText(OoxmlSpreadsheetHandler.toDelimited(sheetData, '\t'), Charsets.UTF_8)
                             FileFormat.JSON -> finalOutputFile.writeText(OoxmlSpreadsheetHandler.toJson(sheetData), Charsets.UTF_8)
+                            FileFormat.XML -> finalOutputFile.writeText(OoxmlSpreadsheetHandler.toXml(sheetData), Charsets.UTF_8)
                             FileFormat.HTML -> finalOutputFile.writeText(OoxmlSpreadsheetHandler.toHtmlTable(sheetData, desiredBase), Charsets.UTF_8)
                             FileFormat.PDF -> PdfEngine.renderSpreadsheetToPdf(sheetData, desiredBase, finalOutputFile, options.pdfPageSize)
                             else -> error("Unsupported spreadsheet target: ${targetFormat.displayName}")
@@ -228,11 +280,11 @@ class ConversionEngine(
                         summary = "Transformed $rowCount rows from ${srcFormat.displayName} to ${targetFormat.displayName}."
                     }
 
-                    else -> error("Conversion ${srcFormat.displayName} -> ${targetFormat.displayName} is not supported.")
+                    else -> error("Conversion ${srcFormat.displayName} → ${targetFormat.displayName} is not supported.")
                 }
             }
 
-            onProgress(ConversionProgress("Saving to local library...", 0.90f))
+            onProgress(ConversionProgress("Saving to library...", 0.90f))
             val outBytes = finalOutputFile.length()
             val opLabel = operationLabel ?: if (primary.format == finalOutputFormat) {
                 "Optimize ${finalOutputFormat.displayName}"
@@ -299,6 +351,7 @@ class ConversionEngine(
             FileFormat.CSV -> OoxmlSpreadsheetHandler.readDelimited(file.readText(Charsets.UTF_8), ',', title)
             FileFormat.TSV -> OoxmlSpreadsheetHandler.readDelimited(file.readText(Charsets.UTF_8), '\t', title)
             FileFormat.JSON -> OoxmlSpreadsheetHandler.readJsonTable(file.readText(Charsets.UTF_8), title)
+            FileFormat.XML -> OoxmlSpreadsheetHandler.readXmlTable(file.readText(Charsets.UTF_8), title)
             else -> error("Cannot read $format as spreadsheet")
         }
     }

@@ -280,7 +280,7 @@ object ImageEngine {
         return out
     }
 
-    private fun writeBmp24(bitmap: Bitmap, outputFile: File) {
+    internal fun writeBmp24(bitmap: Bitmap, outputFile: File) {
         val w = bitmap.width
         val h = bitmap.height
         val rowBytes = w * 3

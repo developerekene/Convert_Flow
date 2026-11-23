@@ -70,7 +70,7 @@ import com.example.ui.components.SavingsPill
 import com.example.ui.components.StudioPillChoice
 import com.example.ui.components.formatBadgeColor
 import com.example.ui.theme.EmeraldSuccess
-import com.example.ui.theme.HeroDeep
+import com.example.ui.theme.ResultDarkAnchor
 import com.example.ui.viewmodel.ConvertFlowViewModel
 import java.io.File
 import java.text.SimpleDateFormat
@@ -151,7 +151,7 @@ fun HistoryScreen(
                                 }
                             }
                             Surface(
-                                color = HeroDeep,
+                                color = ResultDarkAnchor,
                                 shape = RoundedCornerShape(20.dp),
                                 modifier = Modifier.weight(1f)
                             ) {
@@ -162,7 +162,7 @@ fun HistoryScreen(
                                     Text(
                                         text = "SPACE SAVED",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = Color(0xFF93A3C2)
+                                        color = Color(0xFFD6BFC2)
                                     )
                                     Text(
                                         text = if (totalBytesSaved > 0L) FileHelper.formatSize(totalBytesSaved) else "0 B",
@@ -233,7 +233,7 @@ fun HistoryScreen(
                         ) {
                             Image(
                                 painter = painterResource(id = R.drawable.img_empty_history),
-                                contentDescription = "Empty local conversion history",
+                                contentDescription = "Empty conversion library illustration",
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -241,11 +241,11 @@ fun HistoryScreen(
                                     .clip(RoundedCornerShape(18.dp))
                             )
                             Text(
-                                text = "Your Studio Library is Empty",
+                                text = "Your Library is Empty",
                                 style = MaterialTheme.typography.titleLarge
                             )
                             Text(
-                                text = "Convert a PDF, Word file, spreadsheet, or image — every local output appears here ready to preview, share, or export.",
+                                text = "Convert a PDF, Word file, spreadsheet, or image — every converted output appears here ready to preview, share, or export.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center

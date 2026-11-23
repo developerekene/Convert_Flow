@@ -1,6 +1,6 @@
 {
-  "name": "Convert Flow",
-  "description": "Local-first multi-format file converter, compressor, and resizer for PDFs, Word documents, spreadsheets, and images.",
+  "name": "Konvertibles",
+  "description": "Pocket ready to go. Fast multi-format file converter, compressor, and resizer for PDFs, Word documents, spreadsheets, images, and ZIP archives.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

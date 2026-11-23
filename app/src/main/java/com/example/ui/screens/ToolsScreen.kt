@@ -51,8 +51,8 @@ import com.example.ui.theme.BadgeArchive
 import com.example.ui.theme.BadgeImage
 import com.example.ui.theme.BadgePdf
 import com.example.ui.theme.BadgeSheet
-import com.example.ui.theme.HeroDeep
-import com.example.ui.theme.HeroDeepAccent
+import com.example.ui.theme.ResultDarkAccent
+import com.example.ui.theme.ResultDarkAnchor
 
 @Composable
 fun ToolsScreen(
@@ -147,7 +147,7 @@ private fun FeaturedBentoToolCard(
     val accent = toolAccentColor(tool.category)
     Surface(
         shape = RoundedCornerShape(22.dp),
-        color = HeroDeep,
+        color = ResultDarkAnchor,
         modifier = modifier
             .clip(RoundedCornerShape(22.dp))
             .clickable(onClick = onClick)
@@ -159,7 +159,7 @@ private fun FeaturedBentoToolCard(
                 .fillMaxWidth()
                 .background(
                     Brush.linearGradient(
-                        listOf(HeroDeep, HeroDeepAccent, accent.copy(alpha = 0.42f))
+                        listOf(ResultDarkAnchor, ResultDarkAccent, accent.copy(alpha = 0.45f))
                     )
                 )
                 .padding(16.dp)

@@ -23,6 +23,7 @@ enum class FileFormat(
     CSV("csv", "CSV", "text/csv", FormatCategory.SPREADSHEET),
     TSV("tsv", "TSV", "text/tab-separated-values", FormatCategory.SPREADSHEET),
     JSON("json", "JSON", "application/json", FormatCategory.SPREADSHEET),
+    XML("xml", "XML", "application/xml", FormatCategory.SPREADSHEET),
 
     PNG("png", "PNG", "image/png", FormatCategory.IMAGE),
     JPG("jpg", "JPG", "image/jpeg", FormatCategory.IMAGE),
@@ -51,9 +52,10 @@ enum class FileFormat(
                 "text/markdown", "text/x-markdown" -> MD
                 "text/html" -> HTML
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" -> XLSX
-                "text/csv", "text/comma-separated-values" -> CSV
+                "text/csv", "text/comma-separated-values", "application/csv" -> CSV
                 "text/tab-separated-values" -> TSV
                 "application/json" -> JSON
+                "application/xml", "text/xml" -> XML
                 "image/png" -> PNG
                 "image/jpeg", "image/jpg" -> JPG
                 "image/webp" -> WEBP
@@ -61,6 +63,42 @@ enum class FileFormat(
                 "application/zip", "application/x-zip-compressed" -> ZIP
                 else -> null
             }
+        }
+
+        fun mimeFilterFor(formats: Set<FileFormat>): Array<String> {
+            val mimes = linkedSetOf<String>()
+            formats.forEach { fmt ->
+                when (fmt) {
+                    JPG -> {
+                        mimes.add("image/jpeg")
+                        mimes.add("image/jpg")
+                    }
+                    CSV -> {
+                        mimes.add("text/csv")
+                        mimes.add("text/comma-separated-values")
+                        mimes.add("application/csv")
+                    }
+                    MD -> {
+                        mimes.add("text/markdown")
+                        mimes.add("text/x-markdown")
+                        mimes.add("text/plain")
+                    }
+                    XML -> {
+                        mimes.add("application/xml")
+                        mimes.add("text/xml")
+                    }
+                    ZIP -> {
+                        mimes.add("application/zip")
+                        mimes.add("application/x-zip-compressed")
+                    }
+                    JSON -> {
+                        mimes.add("application/json")
+                        mimes.add("text/plain")
+                    }
+                    else -> mimes.add(fmt.mimeType)
+                }
+            }
+            return mimes.toTypedArray()
         }
 
         fun supportedTargetsFor(source: FileFormat, multipleFiles: Boolean = false): List<FileFormat> {
@@ -77,15 +115,16 @@ enum class FileFormat(
                 TXT -> listOf(PDF, DOCX, MD, HTML, ZIP)
                 MD -> listOf(PDF, DOCX, HTML, TXT, ZIP)
                 HTML -> listOf(PDF, DOCX, TXT, MD, ZIP)
-                XLSX -> listOf(CSV, TSV, JSON, HTML, PDF, ZIP)
-                CSV -> listOf(XLSX, TSV, JSON, HTML, PDF, ZIP)
-                TSV -> listOf(XLSX, CSV, JSON, HTML, PDF, ZIP)
-                JSON -> listOf(CSV, XLSX, TSV, HTML, PDF, TXT, ZIP)
+                XLSX -> listOf(CSV, TSV, JSON, XML, HTML, PDF, ZIP)
+                CSV -> listOf(XLSX, TSV, JSON, XML, HTML, PDF, ZIP)
+                TSV -> listOf(XLSX, CSV, JSON, XML, HTML, PDF, ZIP)
+                JSON -> listOf(CSV, XLSX, TSV, XML, HTML, PDF, TXT, ZIP)
+                XML -> listOf(JSON, CSV, XLSX, TSV, HTML, PDF, TXT, ZIP)
                 PNG -> listOf(JPG, WEBP, PDF, BMP, PNG, ZIP)
                 JPG -> listOf(PNG, WEBP, PDF, BMP, JPG, ZIP)
                 WEBP -> listOf(PNG, JPG, PDF, BMP, WEBP, ZIP)
                 BMP -> listOf(PNG, JPG, WEBP, PDF, ZIP)
-                ZIP -> emptyList()
+                ZIP -> listOf(ZIP)
             }
         }
     }

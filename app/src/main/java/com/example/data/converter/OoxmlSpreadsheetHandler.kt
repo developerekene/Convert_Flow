@@ -242,10 +242,118 @@ object OoxmlSpreadsheetHandler {
         return prettyJson.encodeToString(JsonElement.serializer(), jsonArray)
     }
 
+    fun readXmlTable(raw: String, sheetName: String = "XML Data"): SpreadsheetData {
+        val parser = Xml.newPullParser().apply {
+            setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false)
+            setInput(raw.reader())
+        }
+        val records = mutableListOf<Map<String, String>>()
+        val headers = linkedSetOf<String>()
+        var rootDepth = 0
+        var currentRecord: MutableMap<String, String>? = null
+        var recordDepth = -1
+        var currentField: String? = null
+        val textBuffer = StringBuilder()
+
+        var ev = parser.eventType
+        while (ev != XmlPullParser.END_DOCUMENT) {
+            when (ev) {
+                XmlPullParser.START_TAG -> {
+                    val depth = parser.depth
+                    val tagName = parser.name?.substringAfter(':') ?: "field"
+                    if (depth == 1) {
+                        rootDepth = 1
+                    } else if (depth == rootDepth + 1) {
+                        currentRecord = linkedMapOf()
+                        recordDepth = depth
+                        textBuffer.clear()
+                        for (a in 0 until parser.attributeCount) {
+                            val attrName = parser.getAttributeName(a)
+                            val attrVal = parser.getAttributeValue(a) ?: ""
+                            headers.add(attrName)
+                            currentRecord[attrName] = attrVal
+                        }
+                    } else if (currentRecord != null && depth > recordDepth) {
+                        currentField = tagName
+                        textBuffer.clear()
+                    }
+                }
+                XmlPullParser.TEXT -> {
+                    textBuffer.append(parser.text ?: "")
+                }
+                XmlPullParser.END_TAG -> {
+                    val depth = parser.depth
+                    if (currentRecord != null && depth > recordDepth && currentField != null) {
+                        val value = textBuffer.toString().trim()
+                        headers.add(currentField)
+                        currentRecord[currentField] = value
+                        currentField = null
+                        textBuffer.clear()
+                    } else if (currentRecord != null && depth == recordDepth) {
+                        if (currentRecord.isEmpty()) {
+                            val inlineText = textBuffer.toString().trim()
+                            val rowTag = parser.name?.substringAfter(':') ?: "value"
+                            if (inlineText.isNotEmpty()) {
+                                headers.add(rowTag)
+                                currentRecord[rowTag] = inlineText
+                            }
+                        }
+                        if (currentRecord.isNotEmpty()) {
+                            records.add(currentRecord)
+                        }
+                        currentRecord = null
+                        recordDepth = -1
+                        textBuffer.clear()
+                    }
+                }
+            }
+            ev = parser.next()
+        }
+
+        if (records.isEmpty()) {
+            return SpreadsheetData(listOf(SheetData(sheetName, listOf(listOf("Raw XML"), listOf(raw.take(2000))))))
+        }
+        val headerList = headers.toList()
+        val rows = listOf(headerList) + records.map { rec ->
+            headerList.map { key -> rec[key] ?: "" }
+        }
+        return SpreadsheetData(listOf(SheetData(sheetName, rows)))
+    }
+
+    fun toXml(data: SpreadsheetData): String {
+        val sheet = data.sheets.firstOrNull() ?: return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<dataset/>"
+        if (sheet.rows.isEmpty()) return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<dataset/>"
+        val headers = sheet.rows.first().mapIndexed { idx, h ->
+            sanitizeXmlTagName(h.ifBlank { "col_${idx + 1}" })
+        }
+        return buildString {
+            append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
+            append("<dataset sheet=\"${escapeXml(sheet.name)}\">\n")
+            sheet.rows.drop(1).forEach { row ->
+                append("  <record>\n")
+                headers.forEachIndexed { idx, tag ->
+                    val valStr = row.getOrElse(idx) { "" }
+                    append("    <$tag>${escapeXml(valStr)}</$tag>\n")
+                }
+                append("  </record>\n")
+            }
+            append("</dataset>")
+        }
+    }
+
+    private fun sanitizeXmlTagName(raw: String): String {
+        val cleaned = raw.trim().replace(Regex("[^A-Za-z0-9_.-]"), "_")
+        return when {
+            cleaned.isEmpty() -> "field"
+            cleaned.first().isDigit() -> "col_$cleaned"
+            else -> cleaned
+        }
+    }
+
     fun toHtmlTable(data: SpreadsheetData, title: String): String = buildString {
         append("<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"UTF-8\"/>\n")
         append("<title>${TextFormatConverter.escapeHtml(title)}</title>\n")
-        append("<style>body{font-family:-apple-system,sans-serif;margin:28px;color:#141619;}h2{color:#0F9D6E;}table{border-collapse:collapse;width:100%;font-size:14px;}th,td{border:1px solid #DCDAD2;padding:8px 12px;text-align:left;}th{background:#0F9D6E;color:#fff;}tr:nth-child(even){background:#F7F6F2;}</style>\n")
+        append("<style>body{font-family:-apple-system,sans-serif;margin:28px;color:#141518;}h2{color:#DC2626;}table{border-collapse:collapse;width:100%;font-size:14px;}th,td{border:1px solid #E4E6ED;padding:8px 12px;text-align:left;}th{background:#DC2626;color:#fff;}tr:nth-child(even){background:#F7F7F9;}</style>\n")
         append("</head>\n<body>\n")
         data.sheets.forEach { sheet ->
             append("<h2>${TextFormatConverter.escapeHtml(sheet.name)}</h2>\n<table>\n")
@@ -439,7 +547,7 @@ object OoxmlSpreadsheetHandler {
   <fills count="3">
     <fill><patternFill patternType="none"/></fill>
     <fill><patternFill patternType="gray125"/></fill>
-    <fill><patternFill patternType="solid"><fgColor rgb="FF0F9D6E"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFDC2626"/></patternFill></fill>
   </fills>
   <borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
   <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>

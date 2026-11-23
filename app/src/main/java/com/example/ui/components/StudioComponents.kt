@@ -78,16 +78,17 @@ import com.example.ui.theme.BadgePdf
 import com.example.ui.theme.BadgeSheet
 import com.example.ui.theme.BadgeText
 import com.example.ui.theme.BadgeWord
+import com.example.ui.theme.CrimsonPrimary
 import com.example.ui.theme.EmeraldSuccess
-import com.example.ui.theme.HeroDeep
-import com.example.ui.theme.HeroDeepAccent
+import com.example.ui.theme.ResultDarkAccent
+import com.example.ui.theme.ResultDarkAnchor
 import kotlin.math.roundToInt
 
 fun formatBadgeColor(ext: String): Color {
     return when (ext.lowercase()) {
         "pdf" -> BadgePdf
         "docx" -> BadgeWord
-        "xlsx", "csv", "tsv", "json" -> BadgeSheet
+        "xlsx", "csv", "tsv", "json", "xml" -> BadgeSheet
         "png", "jpg", "jpeg", "webp", "bmp" -> BadgeImage
         "zip" -> BadgeArchive
         else -> BadgeText
@@ -567,14 +568,14 @@ fun ConversionResultCard(
     Surface(
         modifier = modifier.fillMaxWidth().testTag("conversion_result_card"),
         shape = RoundedCornerShape(24.dp),
-        color = HeroDeep
+        color = ResultDarkAnchor
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(
                     Brush.linearGradient(
-                        colors = listOf(HeroDeep, HeroDeepAccent)
+                        colors = listOf(ResultDarkAnchor, ResultDarkAccent)
                     )
                 )
         ) {
@@ -706,7 +707,7 @@ private fun ResultActionTile(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val bg = if (highlighted) Color(0xFF3554FF) else Color.White.copy(alpha = 0.10f)
+    val bg = if (highlighted) CrimsonPrimary else Color.White.copy(alpha = 0.12f)
     Surface(
         color = bg,
         shape = RoundedCornerShape(14.dp),
@@ -757,7 +758,7 @@ fun SamplePickerBottomSheet(
                 style = MaterialTheme.typography.headlineSmall
             )
             Text(
-                text = "Creates a real local file so you can try any conversion immediately.",
+                text = "Creates a sample file so you can try any conversion immediately.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

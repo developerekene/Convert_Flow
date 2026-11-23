@@ -22,16 +22,20 @@ import com.example.data.local.ConversionRecord
 import com.example.data.local.HistoryRepository
 import com.example.data.local.PreferencesRepository
 import com.example.data.local.UserPreferences
+import com.example.domain.model.ConversionCatalog
+import com.example.domain.model.ConversionGroup
 import com.example.domain.model.ConversionOptions
+import com.example.domain.model.ConversionPipeline
+import com.example.domain.model.ConversionProgress
 import com.example.domain.model.ConversionUiState
 import com.example.domain.model.FileFormat
 import com.example.domain.model.FormatCategory
 import com.example.domain.model.PdfDpiPreset
 import com.example.domain.model.PdfPageSize
 import com.example.domain.model.PickedFile
+import com.example.domain.model.PipelineMode
 import com.example.domain.model.ResizeMode
 import com.example.domain.model.StudioTool
-import com.example.domain.model.ThemePreference
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -55,6 +59,32 @@ class ConvertFlowViewModel(
 
     val preferences: StateFlow<UserPreferences> = preferencesRepository.preferences
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), UserPreferences())
+
+    private val _selectedGroup = MutableStateFlow(ConversionGroup.ALL)
+    val selectedGroup: StateFlow<ConversionGroup> = _selectedGroup.asStateFlow()
+
+    private val _pipelineSearch = MutableStateFlow("")
+    val pipelineSearch: StateFlow<String> = _pipelineSearch.asStateFlow()
+
+    val filteredPipelines: StateFlow<List<ConversionPipeline>> = combine(
+        _selectedGroup,
+        _pipelineSearch
+    ) { group, query ->
+        val q = query.trim()
+        ConversionCatalog.allPipelines.filter { pipeline ->
+            val matchesGroup = group == ConversionGroup.ALL || pipeline.group == group
+            val matchesQuery = q.isEmpty() ||
+                pipeline.title.contains(q, ignoreCase = true) ||
+                pipeline.subtitle.contains(q, ignoreCase = true) ||
+                pipeline.sourceFormats.any { it.ext.contains(q, ignoreCase = true) || it.displayName.contains(q, ignoreCase = true) } ||
+                pipeline.targetFormat.ext.contains(q, ignoreCase = true) ||
+                pipeline.targetFormat.displayName.contains(q, ignoreCase = true)
+            matchesGroup && matchesQuery
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ConversionCatalog.allPipelines)
+
+    private val _selectedPipeline = MutableStateFlow(ConversionCatalog.allPipelines.first())
+    val selectedPipeline: StateFlow<ConversionPipeline> = _selectedPipeline.asStateFlow()
 
     private val _historyFilter = MutableStateFlow<FormatCategory?>(null)
     val historyFilter: StateFlow<FormatCategory?> = _historyFilter.asStateFlow()
@@ -84,11 +114,8 @@ class ConvertFlowViewModel(
     private val _pickedFiles = MutableStateFlow<List<PickedFile>>(emptyList())
     val pickedFiles: StateFlow<List<PickedFile>> = _pickedFiles.asStateFlow()
 
-    private val _targetFormat = MutableStateFlow<FileFormat?>(null)
+    private val _targetFormat = MutableStateFlow<FileFormat?>(ConversionCatalog.allPipelines.first().targetFormat)
     val targetFormat: StateFlow<FileFormat?> = _targetFormat.asStateFlow()
-
-    private val _availableTargets = MutableStateFlow<List<FileFormat>>(emptyList())
-    val availableTargets: StateFlow<List<FileFormat>> = _availableTargets.asStateFlow()
 
     private val _options = MutableStateFlow(ConversionOptions())
     val options: StateFlow<ConversionOptions> = _options.asStateFlow()
@@ -127,8 +154,76 @@ class ConvertFlowViewModel(
         }
     }
 
-    fun onUrisPicked(uris: List<Uri>) {
+    fun setPipelineGroup(group: ConversionGroup) {
+        _selectedGroup.value = group
+    }
+
+    fun setPipelineSearch(query: String) {
+        _pipelineSearch.value = query
+    }
+
+    fun selectPipeline(pipeline: ConversionPipeline, keepCompatibleFiles: Boolean = true) {
+        _selectedPipeline.value = pipeline
+        _activeTool.value = null
+        _conversionState.value = ConversionUiState.Idle
+        applyOptionsForMode(pipeline.mode)
+
+        val current = _pickedFiles.value
+        val compatible = if (keepCompatibleFiles) {
+            current.filter { it.format in pipeline.sourceFormats }
+        } else {
+            emptyList()
+        }
+
+        if (compatible.isEmpty()) {
+            _pickedFiles.value = emptyList()
+            _targetFormat.value = pipeline.targetFormat
+        } else {
+            val adjusted = if (pipeline.allowMultiple) compatible else compatible.take(1)
+            _pickedFiles.value = adjusted
+            _targetFormat.value = resolvedTargetForPipeline(pipeline, adjusted.firstOrNull())
+        }
+    }
+
+    private fun applyOptionsForMode(mode: PipelineMode) {
+        when (mode) {
+            PipelineMode.COMPRESS_IMAGE -> updateOptions {
+                it.copy(quality = 72, targetSizeKb = null, resizeMode = ResizeMode.NONE, pageRange = "")
+            }
+            PipelineMode.RESIZE_IMAGE -> updateOptions {
+                it.copy(resizeMode = ResizeMode.PERCENTAGE, scalePercent = 50, targetSizeKb = null, pageRange = "")
+            }
+            PipelineMode.COMPRESS_PDF -> updateOptions {
+                it.copy(pdfDpi = PdfDpiPreset.SCREEN_72, quality = 70, pdfPageSize = PdfPageSize.ORIGINAL, pageRange = "")
+            }
+            PipelineMode.RESIZE_PDF -> updateOptions {
+                it.copy(pdfPageSize = PdfPageSize.A4, pdfDpi = PdfDpiPreset.EBOOK_150, quality = 85, pageRange = "")
+            }
+            PipelineMode.SPLIT_PDF -> updateOptions {
+                it.copy(pageRange = "1", pdfPageSize = PdfPageSize.ORIGINAL, quality = 92)
+            }
+            PipelineMode.MERGE_PDF -> updateOptions {
+                it.copy(pageRange = "")
+            }
+            PipelineMode.CONVERT, PipelineMode.EXTRACT_ZIP -> updateOptions {
+                it.copy(pageRange = "", resizeMode = ResizeMode.NONE, targetSizeKb = null)
+            }
+        }
+    }
+
+    private fun resolvedTargetForPipeline(pipeline: ConversionPipeline, primary: PickedFile?): FileFormat {
+        return when (pipeline.mode) {
+            PipelineMode.COMPRESS_IMAGE, PipelineMode.RESIZE_IMAGE -> {
+                primary?.format?.takeIf { it in pipeline.sourceFormats } ?: pipeline.targetFormat
+            }
+            else -> pipeline.targetFormat
+        }
+    }
+
+    fun onUrisPicked(uris: List<Uri>, append: Boolean = false) {
         if (uris.isEmpty()) return
+        val pipeline = _selectedPipeline.value
+
         viewModelScope.launch {
             _isInspecting.value = true
             _conversionState.value = ConversionUiState.Idle
@@ -137,17 +232,29 @@ class ConvertFlowViewModel(
             }
             _isInspecting.value = false
 
-            if (inspected.isEmpty()) {
-                _messages.tryEmit("Unsupported file format. Try PDF, DOCX, XLSX, CSV, TXT, MD, HTML, JSON, or an image.")
+            val valid = inspected.filter { it.format in pipeline.sourceFormats }
+            val rejectedCount = uris.size - valid.size
+
+            if (valid.isEmpty()) {
+                _messages.tryEmit(
+                    "Invalid file type. ${pipeline.title} only accepts ${pipeline.allowedSourceLabel}."
+                )
                 return@launch
             }
 
-            if (inspected.size < uris.size) {
-                _messages.tryEmit("Skipped ${uris.size - inspected.size} unsupported file(s).")
+            if (rejectedCount > 0) {
+                _messages.tryEmit(
+                    "Skipped $rejectedCount incompatible file(s). Only ${pipeline.allowedSourceLabel} accepted."
+                )
             }
 
-            _pickedFiles.value = inspected
-            recomputeTargetsForSelection(inspected)
+            val finalSelection = when {
+                pipeline.allowMultiple && append -> (_pickedFiles.value + valid).distinctBy { it.uri }
+                pipeline.allowMultiple -> valid
+                else -> valid.take(1)
+            }
+            _pickedFiles.value = finalSelection
+            _targetFormat.value = resolvedTargetForPipeline(pipeline, finalSelection.firstOrNull())
         }
     }
 
@@ -162,45 +269,24 @@ class ConvertFlowViewModel(
         }
     }
 
-    private fun recomputeTargetsForSelection(files: List<PickedFile>) {
-        if (files.isEmpty()) {
-            _availableTargets.value = emptyList()
-            _targetFormat.value = null
-            return
-        }
-        val primary = files.first()
-        val multi = files.size > 1
-        val targets = FileFormat.supportedTargetsFor(primary.format, multipleFiles = multi)
-        _availableTargets.value = targets
-
-        val tool = _activeTool.value
-        val preferred = when (tool) {
-            StudioTool.COMPRESS_IMAGE -> primary.format.takeIf { it.category == FormatCategory.IMAGE }
-            StudioTool.RESIZE_IMAGE -> primary.format.takeIf { it.category == FormatCategory.IMAGE }
-            StudioTool.IMAGES_TO_PDF -> FileFormat.PDF
-            StudioTool.PDF_TO_IMAGES -> FileFormat.PNG
-            StudioTool.COMPRESS_PDF, StudioTool.RESIZE_PDF, StudioTool.MERGE_PDF, StudioTool.SPLIT_PDF -> FileFormat.PDF
-            StudioTool.ZIP_ARCHIVE -> FileFormat.ZIP
-            else -> when {
-                multi && files.all { it.format.category == FormatCategory.IMAGE } -> FileFormat.PDF
-                multi && files.all { it.format == FileFormat.PDF } -> FileFormat.PDF
-                multi -> FileFormat.ZIP
-                primary.format == FileFormat.PDF -> FileFormat.DOCX
-                primary.format == FileFormat.DOCX -> FileFormat.PDF
-                primary.format == FileFormat.XLSX -> FileFormat.CSV
-                primary.format == FileFormat.CSV -> FileFormat.XLSX
-                primary.format == FileFormat.JSON -> FileFormat.CSV
-                primary.format == FileFormat.PNG -> FileFormat.JPG
-                primary.format == FileFormat.JPG -> FileFormat.PDF
-                else -> targets.firstOrNull()
+    fun loadSampleForCurrentPipeline() {
+        val pipeline = _selectedPipeline.value
+        val sampleFormat = pipeline.sourceFormats.first()
+        viewModelScope.launch {
+            _isInspecting.value = true
+            val uris = withContext(Dispatchers.IO) {
+                if (pipeline.mode == PipelineMode.MERGE_PDF) {
+                    listOf(
+                        SampleFileGenerator.generateSampleForFormat(getApplication(), FileFormat.PDF, "Report_Part_1.pdf"),
+                        SampleFileGenerator.generateSampleForFormat(getApplication(), FileFormat.PDF, "Report_Part_2.pdf")
+                    )
+                } else {
+                    listOf(SampleFileGenerator.generateSampleForFormat(getApplication(), sampleFormat))
+                }
             }
+            _isInspecting.value = false
+            onUrisPicked(uris)
         }
-        _targetFormat.value = if (preferred != null && preferred in targets) preferred else targets.firstOrNull()
-    }
-
-    fun selectTargetFormat(format: FileFormat) {
-        _targetFormat.value = format
-        _conversionState.value = ConversionUiState.Idle
     }
 
     fun updateOptions(transform: (ConversionOptions) -> ConversionOptions) {
@@ -208,40 +294,9 @@ class ConvertFlowViewModel(
     }
 
     fun launchStudioTool(tool: StudioTool) {
+        val pipeline = ConversionCatalog.byId(tool.pipelineId) ?: ConversionCatalog.allPipelines.first()
+        selectPipeline(pipeline, keepCompatibleFiles = true)
         _activeTool.value = tool
-        _conversionState.value = ConversionUiState.Idle
-        when (tool) {
-            StudioTool.COMPRESS_IMAGE -> {
-                updateOptions { it.copy(quality = 72, targetSizeKb = null, resizeMode = ResizeMode.NONE) }
-            }
-            StudioTool.RESIZE_IMAGE -> {
-                updateOptions { it.copy(resizeMode = ResizeMode.PERCENTAGE, scalePercent = 50, targetSizeKb = null) }
-            }
-            StudioTool.IMAGES_TO_PDF -> {
-                updateOptions { it.copy(pdfPageSize = PdfPageSize.A4, quality = 90) }
-            }
-            StudioTool.PDF_TO_IMAGES -> {
-                updateOptions { it.copy(pdfDpi = PdfDpiPreset.EBOOK_150, quality = 90) }
-            }
-            StudioTool.COMPRESS_PDF -> {
-                updateOptions { it.copy(pdfDpi = PdfDpiPreset.SCREEN_72, quality = 70, pdfPageSize = PdfPageSize.ORIGINAL, pageRange = "") }
-            }
-            StudioTool.RESIZE_PDF -> {
-                updateOptions { it.copy(pdfPageSize = PdfPageSize.A4, pdfDpi = PdfDpiPreset.EBOOK_150, quality = 85, pageRange = "") }
-            }
-            StudioTool.MERGE_PDF -> {
-                updateOptions { it.copy(pageRange = "") }
-            }
-            StudioTool.SPLIT_PDF -> {
-                updateOptions { it.copy(pageRange = "1", pdfPageSize = PdfPageSize.ORIGINAL, quality = 92) }
-            }
-            StudioTool.SPREADSHEET_STUDIO -> Unit
-            StudioTool.ZIP_ARCHIVE -> Unit
-        }
-        val current = _pickedFiles.value
-        if (current.isNotEmpty()) {
-            recomputeTargetsForSelection(current)
-        }
     }
 
     fun clearActiveTool() {
@@ -250,34 +305,37 @@ class ConvertFlowViewModel(
 
     fun clearSelection() {
         _pickedFiles.value = emptyList()
-        _availableTargets.value = emptyList()
-        _targetFormat.value = null
         _conversionState.value = ConversionUiState.Idle
-        _activeTool.value = null
     }
 
     fun resetConversionState() {
         _conversionState.value = ConversionUiState.Idle
     }
 
-    fun runConversion(customOpLabel: String? = null) {
+    fun runConversion() {
+        val pipeline = _selectedPipeline.value
         val files = _pickedFiles.value
-        val target = _targetFormat.value
-        if (files.isEmpty() || target == null) {
-            _messages.tryEmit("Select a file and output format first.")
+        val target = _targetFormat.value ?: pipeline.targetFormat
+        if (files.isEmpty()) {
+            _messages.tryEmit("Upload a ${pipeline.allowedSourceLabel} file first.")
+            return
+        }
+        if (pipeline.mode == PipelineMode.MERGE_PDF && files.size < 2) {
+            _messages.tryEmit("Add at least 2 PDF files to merge.")
             return
         }
 
         viewModelScope.launch {
             _conversionState.value = ConversionUiState.Running(
-                com.example.domain.model.ConversionProgress("Starting local engine...", 0.05f)
+                ConversionProgress("Starting engine...", 0.05f)
             )
             runCatching {
                 conversionEngine.executeConversion(
                     pickedFiles = files,
                     targetFormat = target,
                     options = _options.value,
-                    operationLabel = customOpLabel ?: _activeTool.value?.title
+                    operationLabel = pipeline.title,
+                    extractArchive = pipeline.mode == PipelineMode.EXTRACT_ZIP
                 ) { progress ->
                     _conversionState.value = ConversionUiState.Running(progress)
                 }
@@ -335,7 +393,7 @@ class ConvertFlowViewModel(
                     val doc = TextFormatConverter.fromHtml(file.nameWithoutExtension, file.readText(Charsets.UTF_8))
                     FilePreviewContent.DocumentBlocks(doc.blocks)
                 }
-                FileFormat.TXT, FileFormat.JSON -> {
+                FileFormat.TXT, FileFormat.JSON, FileFormat.XML -> {
                     FilePreviewContent.PlainCode(file.readText(Charsets.UTF_8).take(40_000))
                 }
                 FileFormat.ZIP -> {
@@ -374,23 +432,25 @@ class ConvertFlowViewModel(
         viewModelScope.launch {
             historyRepository.clearAll(FileHelper.convertedDir(getApplication()))
             refreshStorageStats()
-            _messages.tryEmit("Cleared local conversion history.")
+            _messages.tryEmit("Cleared conversion history.")
         }
     }
 
-    fun setTheme(theme: ThemePreference) = viewModelScope.launch { preferencesRepository.setTheme(theme) }
     fun setDefaultQuality(q: Int) = viewModelScope.launch {
         preferencesRepository.setDefaultQuality(q)
         updateOptions { it.copy(quality = q) }
     }
+
     fun setDefaultPdfDpi(dpi: PdfDpiPreset) = viewModelScope.launch {
         preferencesRepository.setDefaultPdfDpi(dpi)
         updateOptions { it.copy(pdfDpi = dpi) }
     }
+
     fun setDefaultPdfPageSize(size: PdfPageSize) = viewModelScope.launch {
         preferencesRepository.setDefaultPdfPageSize(size)
         updateOptions { it.copy(pdfPageSize = size) }
     }
+
     fun setStripExif(strip: Boolean) = viewModelScope.launch {
         preferencesRepository.setStripExif(strip)
         updateOptions { it.copy(stripExif = strip) }

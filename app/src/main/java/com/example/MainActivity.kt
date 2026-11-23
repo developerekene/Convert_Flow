@@ -1,10 +1,16 @@
 package com.example
 
+import android.graphics.Color
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -29,6 +35,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -41,7 +48,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -50,31 +56,26 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
-import com.example.domain.model.ThemePreference
 import com.example.ui.navigation.AppDestination
 import com.example.ui.screens.ConvertScreen
 import com.example.ui.screens.HistoryScreen
 import com.example.ui.screens.PreviewScreen
 import com.example.ui.screens.SettingsScreen
 import com.example.ui.screens.ToolsScreen
-import com.example.ui.theme.ConvertFlowTheme
+import com.example.ui.theme.KonvertiblesTheme
 import com.example.ui.viewmodel.ConvertFlowViewModel
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.light(Color.WHITE, Color.WHITE),
+            navigationBarStyle = SystemBarStyle.light(Color.WHITE, Color.WHITE)
+        )
         setContent {
             val viewModel: ConvertFlowViewModel = viewModel(factory = ConvertFlowViewModel.Factory)
-            val prefs by viewModel.preferences.collectAsStateWithLifecycle()
-            val darkTheme = when (prefs.theme) {
-                ThemePreference.SYSTEM -> isSystemInDarkTheme()
-                ThemePreference.LIGHT -> false
-                ThemePreference.DARK -> true
-            }
-
-            ConvertFlowTheme(darkTheme = darkTheme) {
-                ConvertFlowRoot(viewModel = viewModel)
+            KonvertiblesTheme {
+                KonvertiblesRoot(viewModel = viewModel)
             }
         }
     }
@@ -96,7 +97,7 @@ private val TOP_LEVEL_TABS = listOf(
 )
 
 @Composable
-private fun ConvertFlowRoot(viewModel: ConvertFlowViewModel) {
+private fun KonvertiblesRoot(viewModel: ConvertFlowViewModel) {
     val navController = rememberNavController()
     val snackbarHostState = remember { SnackbarHostState() }
     val backStackEntry by navController.currentBackStackEntryAsState()
@@ -131,11 +132,11 @@ private fun ConvertFlowRoot(viewModel: ConvertFlowViewModel) {
                 if (!useNavRail && !isPreviewRoute) {
                     Column {
                         HorizontalDivider(
-                            thickness = 0.6.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant
+                            thickness = 0.8.dp,
+                            color = MaterialTheme.colorScheme.outline
                         )
                         NavigationBar(
-                            containerColor = MaterialTheme.colorScheme.surface,
+                            containerColor = MaterialTheme.colorScheme.background,
                             tonalElevation = 0.dp
                         ) {
                             TOP_LEVEL_TABS.forEach { tab ->
@@ -153,7 +154,7 @@ private fun ConvertFlowRoot(viewModel: ConvertFlowViewModel) {
                                     colors = NavigationBarItemDefaults.colors(
                                         selectedIconColor = MaterialTheme.colorScheme.primary,
                                         selectedTextColor = MaterialTheme.colorScheme.primary,
-                                        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.13f),
+                                        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
                                         unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
                                         unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
                                     ),
@@ -171,7 +172,7 @@ private fun ConvertFlowRoot(viewModel: ConvertFlowViewModel) {
                     .padding(innerPadding)
             ) {
                 if (useNavRail && !isPreviewRoute) {
-                    NavigationRail(containerColor = MaterialTheme.colorScheme.surface) {
+                    NavigationRail(containerColor = MaterialTheme.colorScheme.background) {
                         TOP_LEVEL_TABS.forEach { tab ->
                             val selected = currentDest?.hasRoute(tab.route::class) == true
                             NavigationRailItem(
@@ -184,6 +185,13 @@ private fun ConvertFlowRoot(viewModel: ConvertFlowViewModel) {
                                     )
                                 },
                                 label = { Text(tab.label) },
+                                colors = NavigationRailItemDefaults.colors(
+                                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                                    indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                ),
                                 modifier = Modifier.testTag(tab.testTag)
                             )
                         }
@@ -193,6 +201,18 @@ private fun ConvertFlowRoot(viewModel: ConvertFlowViewModel) {
                 NavHost(
                     navController = navController,
                     startDestination = AppDestination.Convert,
+                    enterTransition = {
+                        fadeIn(tween(220)) + slideInHorizontally(tween(240)) { it / 16 }
+                    },
+                    exitTransition = {
+                        fadeOut(tween(180)) + slideOutHorizontally(tween(200)) { -it / 20 }
+                    },
+                    popEnterTransition = {
+                        fadeIn(tween(220)) + slideInHorizontally(tween(240)) { -it / 16 }
+                    },
+                    popExitTransition = {
+                        fadeOut(tween(180)) + slideOutHorizontally(tween(200)) { it / 20 }
+                    },
                     modifier = Modifier.weight(1f).fillMaxSize()
                 ) {
                     composable<AppDestination.Convert> {
